@@ -1,22 +1,24 @@
 import 'js-slang/dist/editors/ace/theme/source';
-
+import type es from 'estree';
 import { Button, ButtonGroup, Card, Classes, Divider, Pre, Slider } from '@blueprintjs/core';
 import { getHotkeyHandler, HotkeyItem } from '@mantine/hooks';
 import classNames from 'classnames';
 import { HighlightRulesSelector, ModeSelector } from 'js-slang/dist/editors/ace/modes/source';
 import { IStepperPropContents } from 'js-slang/dist/stepper/stepper';
 import React, { useCallback, useEffect, useState } from 'react';
-import AceEditor from 'react-ace';
+import AceEditor, { IMarker } from 'react-ace';
 import { useDispatch } from 'react-redux';
 
 import { beginAlertSideContent } from '../SideContentActions';
 import { SideContentLocation, SideContentType } from '../SideContentTypes';
+import { astToString } from 'js-slang/dist/utils/ast/astToString';
+import { getMarker } from 'js-slang/dist/stepper/expression_stepper/v2-highlighted/stepper';
 
 const SubstDefaultText = () => {
   return (
     <div>
       <div id="substituter-default-text" className={Classes.RUNNING_TEXT}>
-        Welcome to the Stepper!
+        Welcome to the Stepper! 
         <br />
         <br />
         On this tab, the REPL will be hidden from view, so do check that your code has no errors
@@ -57,12 +59,154 @@ const SubstCodeDisplay = (props: { content: string }) => {
   );
 };
 
+/*
 type SubstVisualizerProps = {
   content: IStepperPropContents[];
   workspaceLocation: SideContentLocation;
 };
+*/
 
-const SideContentSubstVisualizer: React.FC<SubstVisualizerProps> = props => {
+// custom IStepperPropAST
+type IStepperPropAST = {
+  ast: string; 
+  markers: IMarker[];
+}
+
+type SubstVisualizerPropsAST = {
+  content: IStepperPropAST[];
+  workspaceLocation: SideContentLocation;
+}
+
+
+const SideContentSubstVisualizer: React.FC<SubstVisualizerPropsAST> = props => {
+  const [stepValue, setStepValue] = useState(1);
+  const lastStepValue = props.content.length;
+  const hasRunCode = lastStepValue !== 0;
+  const dispatch = useDispatch();
+  const alertSideContent = useCallback(
+    () => dispatch(beginAlertSideContent(SideContentType.substVisualizer, props.workspaceLocation)),
+    [props.workspaceLocation, dispatch]
+  );
+
+  // set source mode as 2
+  useEffect(() => {
+    HighlightRulesSelector(2);
+    ModeSelector(2);
+  }, []);
+
+  // reset stepValue when content changes
+  useEffect(() => {
+    setStepValue(1);
+    if (props.content.length > 0) {
+      alertSideContent();
+    }
+  }, [props.content, setStepValue, alertSideContent]);
+
+  const stepPrevious = () => setStepValue(Math.max(1, stepValue - 1));
+  const stepNext = () => setStepValue(Math.min(props.content.length, stepValue + 1));
+
+  // placeholder marker
+  const getDiffMarkers = useCallback(
+    (value: number): IMarker[] => {
+      const contIndex = value <= lastStepValue ? value - 1 : 0;
+      const astNode = JSON.parse(props.content[contIndex].ast) as es.Node;
+      const diffMarkers = getMarker(astNode);
+      return diffMarkers.map(
+        (stepperMarker) => ({
+          startRow: stepperMarker.startRow,
+          startCol: stepperMarker.startCol,
+          endRow: stepperMarker.endRow,
+          endCol: stepperMarker.endCol,
+          className: stepperMarker.className,
+          type: "text"
+        })
+      );
+    },
+    [lastStepValue, props.content]
+  );
+
+  // fix
+  const getExplanation = useCallback(
+    (value: number): string => {
+      const contIndex = value <= lastStepValue ? value - 1 : 0;
+      const astNode = JSON.parse(props.content[contIndex].ast) as es.Node;
+      const diffMarkers = getMarker(astNode);
+      return diffMarkers[0].explanation;
+    },
+    [lastStepValue, props.content]
+  )
+  // use codify function from js-slang
+  const getText = useCallback(
+    (value: number): string => {
+      const contIndex = value <= lastStepValue ? value - 1 : 0;
+      const astNode = JSON.parse(props.content[contIndex].ast) as es.Node;
+      const textContent = astToString(astNode);
+      return textContent;
+    },
+    [lastStepValue, props.content]
+  );
+  return (
+    <div
+      className={classNames('sa-substituter', Classes.DARK)}
+      tabIndex={-1} // tab index necessary to fire keydown events on div element
+    >
+      <Slider
+        disabled={!hasRunCode}
+        min={1}
+        max={lastStepValue}
+        onChange={setStepValue}
+        value={stepValue <= lastStepValue ? stepValue : 1}
+      />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <ButtonGroup>
+          <Button
+            disabled={!hasRunCode || stepValue === 1}
+            icon="chevron-left"
+            onClick={stepPrevious}
+          />
+          <Button
+            disabled={!hasRunCode || stepValue === lastStepValue}
+            icon="chevron-right"
+            onClick={stepNext}
+          />
+        </ButtonGroup>
+      </div>{' '}
+      <br />
+      {hasRunCode ? (
+        <AceEditor
+          className="react-ace"
+          mode="source2defaultNONE"
+          theme="source"
+          fontSize={17}
+          highlightActiveLine={false}
+          wrapEnabled={true}
+          height="unset"
+          width="100%"
+          showGutter={false}
+          readOnly={true}
+          maxLines={Infinity}
+          value={getText(stepValue)+'\n'}
+          markers={getDiffMarkers(stepValue)}
+          setOptions={{
+            fontFamily: "'Inconsolata', 'Consolas', monospace"
+          }}
+        />
+      ) : (
+        <SubstDefaultText />
+      )}
+      {hasRunCode ? (
+        <SubstCodeDisplay
+          content={
+            getExplanation(stepValue)
+          }
+        />
+      ) : null}
+      <div>V01 Expression stepper</div>
+    </div>
+  )
+}
+/*
+const _SideContentSubstVisualizer: React.FC<SubstVisualizerProps> = props => {
   const [stepValue, setStepValue] = useState(1);
   const lastStepValue = props.content.length;
   const hasRunCode = lastStepValue !== 0; // 'content' property is initialised to '[]' by Playground component
@@ -197,10 +341,10 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerProps> = props => {
 
           diffMarkers.push({
             startRow: startR,
-            startCol: startC,
+             % 2 === 0 ? 'beforeMarker' :startCol: startC,
             endRow: endR,
             endCol: endC,
-            className: value % 2 === 0 ? 'beforeMarker' : 'afterMarker',
+            className: value 'afterMarker',
             type: 'background'
           });
 
@@ -287,5 +431,5 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerProps> = props => {
     </div>
   );
 };
-
+*/
 export default SideContentSubstVisualizer;

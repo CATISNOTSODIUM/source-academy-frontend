@@ -122,7 +122,6 @@ $code-color-notification: #f9f0d7;
       flex: 1;
       height: 100%;
       margin: 2px;
-
       #brace-editor {
         height: 100%;
       }
@@ -421,7 +420,13 @@ $code-color-notification: #f9f0d7;
           .beforeMarker {
             background: rgba(179, 101, 57, 0.75);
             position: absolute;
+            pointer-events: auto;
+            cursor: pointer;
             z-index: 20;
+          }
+
+          .beforeMarker:hover {
+            background: rgba(100, 101, 57, 0.75);
           }
 
           .afterMarker {

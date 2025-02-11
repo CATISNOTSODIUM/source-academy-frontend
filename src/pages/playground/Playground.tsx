@@ -261,7 +261,7 @@ const Playground: React.FC<PlaygroundProps> = props => {
         ),
       handleReplEval: () => dispatch(WorkspaceActions.evalRepl(workspaceLocation)),
       handleReplOutputClear: () => dispatch(WorkspaceActions.clearReplOutput(workspaceLocation)),
-      handleUsingSubst: (usingSubst: boolean) =>
+      handleUsingSubst: (usingSubst: boolean) => // mark
         dispatch(WorkspaceActions.toggleUsingSubst(usingSubst, workspaceLocation))
     };
   }, [dispatch, workspaceLocation]);
